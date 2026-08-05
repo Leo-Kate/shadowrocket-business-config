@@ -30,10 +30,25 @@ $ruleNames = @(
     'Reddit.list',
     'Spotify.list',
     'Telegram.list',
+    'TikTok.list',
     'Twitter.list',
     'WeChat.list',
     'YouTube.list'
 )
+
+# These upstream rules are intentionally excluded because they are either too
+# broad for a business profile or overlap a domestic product from the same
+# vendor. Product-specific domains remain in each managed list.
+$excludedRules = @{
+    'PayPal.list' = @('DOMAIN-KEYWORD,paypal')
+    'Prevent_DNS_Leaks.list' = @('DOMAIN-KEYWORD,leak')
+    'Proxy.list' = @('DOMAIN-KEYWORD,leak')
+    'TikTok.list' = @(
+        'DOMAIN-SUFFIX,bytedance.com',
+        'DOMAIN-SUFFIX,bytedance.net',
+        'DOMAIN-SUFFIX,pstatp.com'
+    )
+}
 
 $allowedTypes = @(
     'DOMAIN',
@@ -64,6 +79,25 @@ try {
 
         Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $destination
         $lines = Get-Content -LiteralPath $destination -Encoding UTF8
+
+        if ($excludedRules.ContainsKey($name)) {
+            $excluded = @($excludedRules[$name])
+            $lines = @($lines | Where-Object { $_.Trim() -notin $excluded })
+
+            $filteredCount = @($lines | Where-Object {
+                $_.Trim() -and -not $_.Trim().StartsWith('#')
+            }).Count
+            for ($index = 0; $index -lt $lines.Count; $index++) {
+                if ($lines[$index] -match '^# .*: \d+\s*$') {
+                    $lines[$index] = "# Active rules after local safety filters: $filteredCount"
+                    break
+                }
+            }
+
+            $utf8NoBom = New-Object Text.UTF8Encoding($false)
+            [IO.File]::WriteAllLines($destination, [string[]]$lines, $utf8NoBom)
+        }
+
         $activeLines = @($lines | Where-Object {
             $_.Trim() -and -not $_.Trim().StartsWith('#')
         })

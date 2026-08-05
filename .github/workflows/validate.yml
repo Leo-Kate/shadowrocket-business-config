@@ -1,0 +1,19 @@
+name: Validate Shadowrocket configuration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate configuration and managed rules
+        shell: pwsh
+        run: ./scripts/validate-config.ps1

@@ -1,5 +1,5 @@
 # 规则名称: Proxy
-# 规则统计: 17544
+# Active rules after local safety filters: 17543
 
 DOMAIN,api.avax.network
 DOMAIN,api.revenuecat.com
@@ -17046,7 +17046,6 @@ DOMAIN-KEYWORD,discord
 DOMAIN-KEYWORD,dropbox
 DOMAIN-KEYWORD,facebook
 DOMAIN-KEYWORD,google
-DOMAIN-KEYWORD,leak
 DOMAIN-KEYWORD,openai
 DOMAIN-KEYWORD,pinterest
 DOMAIN-KEYWORD,sci-hub

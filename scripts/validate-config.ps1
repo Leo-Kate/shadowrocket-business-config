@@ -128,6 +128,7 @@ $expectedDefaults = [ordered]@{
     Social = 'PROXY'
     Telegram = 'PROXY'
     YouTube = 'PROXY'
+    TikTok = 'PROXY'
     Streaming = 'PROXY'
     DNS = 'PROXY'
     Global = 'PROXY'
@@ -160,6 +161,38 @@ foreach ($group in $groups.Values) {
 }
 $checks += Add-Check 'group-references' ($groupReferenceErrors.Count -eq 0) "errors=$($groupReferenceErrors.Count)"
 
+$regionSamples = [ordered]@{
+    'Hong Kong' = @('🇭🇰 香港 01', 'HK01')
+    'Taiwan' = @('🇹🇼 台灣 01', 'TW01')
+    'Japan' = @('🇯🇵 日本 01', 'JP01')
+    'Singapore' = @('🇸🇬 新加坡 01', 'SG01')
+    'Korea' = @('🇰🇷 韓國 01', 'KR01')
+    'United States' = @('🇺🇸 美国 01', 'US01')
+}
+$regionFilterErrors = @()
+foreach ($entry in $regionSamples.GetEnumerator()) {
+    if (-not $groups.ContainsKey($entry.Key)) {
+        $regionFilterErrors += "$($entry.Key): missing group"
+        continue
+    }
+
+    $filterOption = $groups[$entry.Key].Options |
+        Where-Object { $_ -like 'policy-regex-filter=*' } |
+        Select-Object -First 1
+    $pattern = if ($filterOption) { ([string]$filterOption).Split('=', 2)[1] } else { '' }
+    try {
+        foreach ($sample in $entry.Value) {
+            if (-not [regex]::IsMatch($sample, $pattern)) {
+                $regionFilterErrors += "$($entry.Key): does not match $sample"
+            }
+        }
+    }
+    catch {
+        $regionFilterErrors += "$($entry.Key): invalid regex $pattern"
+    }
+}
+$checks += Add-Check 'region-node-filters' ($regionFilterErrors.Count -eq 0) "errors=$($regionFilterErrors.Count)"
+
 $allowedRuleTypes = @(
     'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'IP-CIDR', 'IP-CIDR6',
     'IP-ASN', 'GEOIP', 'FINAL', 'USER-AGENT', 'RULE-SET', 'DST-PORT'
@@ -188,6 +221,31 @@ $checks += Add-Check 'geoip-cn' (
     $chinaGeoRules[0].Line -lt $finalRules[0].Line
 ) "count=$($chinaGeoRules.Count); policy=$($chinaGeoRules[0].Policy)"
 
+$legacyStartLine = [Array]::IndexOf($lines, '# Baidu/iqiyi') + 1
+$legacyEndLine = [Array]::IndexOf($lines, '# LAN') + 1
+$legacyInternationalRule = $rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/LegacyInternational\.list$'
+} | Select-Object -First 1
+$proxySetRule = $rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/Proxy\.list$'
+} | Select-Object -First 1
+$chinaDomainSetRule = $rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/ChinaDomain\.list$'
+} | Select-Object -First 1
+$chinaIpSetRule = $rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/ChinaIP\.list$'
+} | Select-Object -First 1
+$checks += Add-Check 'routing-layer-order' (
+    $legacyStartLine -gt 0 -and
+    $legacyEndLine -gt $legacyStartLine -and
+    $legacyInternationalRule.Line -lt $legacyStartLine -and
+    $proxySetRule.Line -gt $legacyEndLine -and
+    $proxySetRule.Line -lt $chinaDomainSetRule.Line -and
+    $chinaDomainSetRule.Line -lt $chinaIpSetRule.Line -and
+    $chinaIpSetRule.Line -lt $chinaGeoRules[0].Line -and
+    $chinaGeoRules[0].Line -lt $finalRules[0].Line
+) "legacy=$legacyStartLine-$legacyEndLine; proxy=$($proxySetRule.Line); china-domain=$($chinaDomainSetRule.Line); china-ip=$($chinaIpSetRule.Line)"
+
 $localRuleSets = @{}
 $ruleSetErrors = @()
 foreach ($rule in @($rules | Where-Object { $_.Type -eq 'RULE-SET' })) {
@@ -205,6 +263,27 @@ foreach ($rule in @($rules | Where-Object { $_.Type -eq 'RULE-SET' })) {
     }
 }
 $checks += Add-Check 'rule-set-mirrors' ($ruleSetErrors.Count -eq 0) "sets=$($localRuleSets.Count); errors=$($ruleSetErrors.Count)"
+$checks += Add-Check 'managed-rule-count' ($localRuleSets.Count -eq 22) "sets=$($localRuleSets.Count)"
+
+$unsafeManagedRules = @(
+    @{ File = 'PayPal.list'; Rule = 'DOMAIN-KEYWORD,paypal' },
+    @{ File = 'Prevent_DNS_Leaks.list'; Rule = 'DOMAIN-KEYWORD,leak' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,bytedance.com' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,bytedance.net' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,pstatp.com' }
+)
+$unsafeManagedHits = @()
+foreach ($entry in $unsafeManagedRules) {
+    $localPath = Join-Path $rulesDir $entry.File
+    if (Test-Path -LiteralPath $localPath) {
+        $hit = Get-Content -LiteralPath $localPath -Encoding UTF8 |
+            Where-Object { $_.Trim() -eq $entry.Rule }
+        if ($hit) {
+            $unsafeManagedHits += "$($entry.File):$($entry.Rule)"
+        }
+    }
+}
+$checks += Add-Check 'managed-rule-safety-filters' ($unsafeManagedHits.Count -eq 0) "hits=$($unsafeManagedHits.Count)"
 
 $ruleSetCache = @{}
 function Get-RuleSetRules {
@@ -282,16 +361,31 @@ $routeTests = [ordered]@{
     'www.paypal.com' = 'PayPal'
     'api.braintreegateway.com' = 'PayPal'
     'www.douyin.com' = 'Domestic'
+    'www.bytedance.com' = 'Domestic'
     'www.taobao.com' = 'Domestic'
     'www.jd.com' = 'Domestic'
     'www.xiaohongshu.com' = 'Domestic'
     'www.bilibili.com' = 'Domestic'
     'mobile.icbc.com.cn' = 'Domestic'
+    'www.pinduoduo.com' = 'Domestic'
+    'www.meituan.com' = 'Domestic'
+    'www.ele.me' = 'Domestic'
+    'www.12306.cn' = 'Domestic'
+    'www.didiglobal.com' = 'Domestic'
+    'www.kuaishou.com' = 'Domestic'
+    'www.cnki.net' = 'Domestic'
+    'www.cqvip.com' = 'Domestic'
+    'www.kuke.com' = 'Domestic'
+    'c.mi.com' = 'Domestic'
     'www.apple.com' = 'Apple'
     'www.outlook.com' = 'Microsoft'
     'mail.google.com' = 'Google'
     'www.google.cn' = 'Google'
     'www.youtube.com' = 'YouTube'
+    'www.tiktok.com' = 'TikTok'
+    'v16.tiktokcdn.com' = 'TikTok'
+    'p1-tt.byteimg.com' = 'TikTok'
+    'www.capcut.com' = 'TikTok'
     'www.instagram.com' = 'Social'
     'www.facebook.com' = 'Social'
     'www.threads.net' = 'Social'
@@ -306,6 +400,13 @@ $routeTests = [ordered]@{
     'www.netflix.com' = 'Streaming'
     'www.disneyplus.com' = 'Streaming'
     'open.spotify.com' = 'Streaming'
+    'www.soundcloud.com' = 'Streaming'
+    'auth0.com' = 'AI'
+    'challenges.cloudflare.com' = 'AI'
+    'dns.google' = 'DNS'
+    'dns.cloudflare.com' = 'DNS'
+    'doh.pub' = 'DNS'
+    'dns.alidns.com' = 'DNS'
     'www.dnsleaktest.com' = 'Global'
     'www.booking.com' = 'Global'
     'www.accuweather.com' = 'Global'
@@ -313,6 +414,22 @@ $routeTests = [ordered]@{
     'www.udacity.com' = 'Global'
     'www.whatismyip.com' = 'Global'
     'www.ipv6-test.com' = 'Global'
+    'www.weather.com' = 'Global'
+    'www.kwai.com' = 'Global'
+    'www.aliexpress.com' = 'Global'
+    'www.lazada.com' = 'Global'
+    'www.temu.com' = 'Global'
+    'www.shein.com' = 'Global'
+    'www.github.com' = 'Global'
+    'www.discord.com' = 'Global'
+    'www.amazon.com' = 'Global'
+    'www.wikipedia.org' = 'Global'
+    'www.nature.com' = 'Global'
+    'store.steampowered.com' = 'Global'
+    'www.apache.org' = 'Global'
+    'community.oneplus.com' = 'Global'
+    'paypal-security-example.invalid' = 'Final'
+    'leakproof.example.invalid' = 'Final'
 }
 
 $routeFailures = @()
@@ -322,9 +439,16 @@ foreach ($entry in $routeTests.GetEnumerator()) {
         $routeFailures += "$($entry.Key): expected $($entry.Value), got $actual"
     }
 }
-$checks += Add-Check 'representative-routing' ($routeFailures.Count -eq 0) "tests=$($routeTests.Count); errors=$($routeFailures.Count)"
+$routeDetail = if ($routeFailures.Count -gt 0) { $routeFailures -join ' | ' } else { 'none' }
+$checks += Add-Check 'representative-routing' ($routeFailures.Count -eq 0) "tests=$($routeTests.Count); errors=$($routeFailures.Count); $routeDetail"
 
-$dnsAddresses = @('8.8.8.8/32', '8.8.4.4/32', '1.1.1.1/32', '1.0.0.1/32')
+$dnsAddresses = @(
+    '8.8.8.8/32', '8.8.4.4/32', '1.1.1.1/32', '1.0.0.1/32',
+    '9.9.9.9/32', '149.112.112.112/32',
+    '208.67.222.222/32', '208.67.220.220/32',
+    '94.140.14.14/32', '94.140.15.15/32',
+    '223.5.5.5/32', '223.6.6.6/32', '119.29.29.29/32', '180.76.76.76/32'
+)
 $dnsRuleErrors = @()
 foreach ($address in $dnsAddresses) {
     if (@($rules | Where-Object {
@@ -339,6 +463,21 @@ $dnsPortRules = @($rules | Where-Object {
     $_.Type -eq 'DST-PORT' -and $_.Value -in @('53', '853') -and $_.Policy -eq 'DNS'
 })
 $checks += Add-Check 'dns-port-routing' ($dnsPortRules.Count -eq 2) "rules=$($dnsPortRules.Count)"
+
+$lanAddresses = @('192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12', '127.0.0.0/8')
+$lanRuleErrors = @()
+foreach ($address in $lanAddresses) {
+    $matchingRules = @($rules | Where-Object {
+        $_.Type -eq 'IP-CIDR' -and
+        $_.Value -eq $address -and
+        $_.Policy -eq 'DIRECT' -and
+        $_.Raw -match ',no-resolve$'
+    })
+    if ($matchingRules.Count -ne 1) {
+        $lanRuleErrors += $address
+    }
+}
+$checks += Add-Check 'lan-no-resolve' ($lanRuleErrors.Count -eq 0) "errors=$($lanRuleErrors.Count)"
 
 $secretPattern = '(^|,)(password|passwd|username|uuid|token|private-key|public-key|psk)\s*=|ss://|ssr://|vmess://|vless://|trojan://|hy2://|hysteria2://|tuic://|wireguard'
 $secretHits = @($lines | Where-Object { $_ -match $secretPattern })

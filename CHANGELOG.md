@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0 - 2026-08-06
+
+- Added a dedicated TikTok group and separated international TikTok traffic from the Douyin/ByteDance domestic fallback.
+- Added common application-owned DoH endpoints and resolver IPs to the proxied DNS policy.
+- Added curated international overrides so preserved legacy DIRECT entries cannot leak clearly overseas traffic.
+- Moved broad overseas and China classification after service-specific and legacy rules to preserve selectable policy groups.
+- Expanded regional node filters for flags, compact country codes, and Chinese node names.
+- Removed overbroad `paypal` and `leak` keyword rules from managed snapshots.
+- Added regression checks for rule-layer order, TikTok/Douyin separation, DNS endpoints, regional filters, and LAN `no-resolve` behavior.
+
 ## v2.0.0 - 2026-08-06
 
 - Added selectable policy groups with explicit DIRECT/PROXY defaults.
