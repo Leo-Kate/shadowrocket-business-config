@@ -44,6 +44,9 @@ $excludedRules = @{
     'Prevent_DNS_Leaks.list' = @('DOMAIN-KEYWORD,leak')
     'Proxy.list' = @('DOMAIN-KEYWORD,leak')
     'TikTok.list' = @(
+        'DOMAIN,api.snapkit.com',
+        'DOMAIN,cocacola.co.jp',
+        'DOMAIN,engagements.appsflyer.com',
         'DOMAIN-SUFFIX,bytedance.com',
         'DOMAIN-SUFFIX,bytedance.net',
         'DOMAIN-SUFFIX,pstatp.com'

@@ -169,6 +169,14 @@ $regionSamples = [ordered]@{
     'Korea' = @('🇰🇷 韓國 01', 'KR01')
     'United States' = @('🇺🇸 美国 01', 'US01')
 }
+$regionNegativeSamples = [ordered]@{
+    'Hong Kong' = @('SHK Premium')
+    'Taiwan' = @('Network Premium')
+    'Japan' = @('JPGallery 01')
+    'Singapore' = @('SGateway 01')
+    'Korea' = @('Ukraine 01')
+    'United States' = @('Australia 01', 'Austria 01', 'Russia 01')
+}
 $regionFilterErrors = @()
 foreach ($entry in $regionSamples.GetEnumerator()) {
     if (-not $groups.ContainsKey($entry.Key)) {
@@ -184,6 +192,11 @@ foreach ($entry in $regionSamples.GetEnumerator()) {
         foreach ($sample in $entry.Value) {
             if (-not [regex]::IsMatch($sample, $pattern)) {
                 $regionFilterErrors += "$($entry.Key): does not match $sample"
+            }
+        }
+        foreach ($sample in $regionNegativeSamples[$entry.Key]) {
+            if ([regex]::IsMatch($sample, $pattern)) {
+                $regionFilterErrors += "$($entry.Key): unexpectedly matches $sample"
             }
         }
     }
@@ -246,6 +259,16 @@ $checks += Add-Check 'routing-layer-order' (
     $chinaGeoRules[0].Line -lt $finalRules[0].Line
 ) "legacy=$legacyStartLine-$legacyEndLine; proxy=$($proxySetRule.Line); china-domain=$($chinaDomainSetRule.Line); china-ip=$($chinaIpSetRule.Line)"
 
+$tiktokUserAgentRules = @($rules | Where-Object {
+    $_.Type -eq 'USER-AGENT' -and
+    $_.Value -eq 'TikTok*' -and
+    $_.Policy -eq 'TikTok'
+})
+$checks += Add-Check 'tiktok-user-agent' (
+    $tiktokUserAgentRules.Count -eq 1 -and
+    $tiktokUserAgentRules[0].Line -lt $chinaDomainSetRule.Line
+) "count=$($tiktokUserAgentRules.Count); line=$($tiktokUserAgentRules[0].Line); china-domain=$($chinaDomainSetRule.Line)"
+
 $localRuleSets = @{}
 $ruleSetErrors = @()
 foreach ($rule in @($rules | Where-Object { $_.Type -eq 'RULE-SET' })) {
@@ -268,6 +291,10 @@ $checks += Add-Check 'managed-rule-count' ($localRuleSets.Count -eq 22) "sets=$(
 $unsafeManagedRules = @(
     @{ File = 'PayPal.list'; Rule = 'DOMAIN-KEYWORD,paypal' },
     @{ File = 'Prevent_DNS_Leaks.list'; Rule = 'DOMAIN-KEYWORD,leak' },
+    @{ File = 'Proxy.list'; Rule = 'DOMAIN-KEYWORD,leak' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN,api.snapkit.com' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN,cocacola.co.jp' },
+    @{ File = 'TikTok.list'; Rule = 'DOMAIN,engagements.appsflyer.com' },
     @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,bytedance.com' },
     @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,bytedance.net' },
     @{ File = 'TikTok.list'; Rule = 'DOMAIN-SUFFIX,pstatp.com' }
@@ -284,6 +311,96 @@ foreach ($entry in $unsafeManagedRules) {
     }
 }
 $checks += Add-Check 'managed-rule-safety-filters' ($unsafeManagedHits.Count -eq 0) "hits=$($unsafeManagedHits.Count)"
+
+$managedAllowedTypes = @(
+    'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD',
+    'DOMAIN-REGEX', 'IP-CIDR', 'IP-CIDR6', 'IP-ASN', 'USER-AGENT',
+    'PROCESS-NAME', 'URL-REGEX', 'DEST-PORT', 'DST-PORT', 'PROTOCOL',
+    'AND', 'OR', 'NOT'
+)
+$managedRuleErrors = @()
+foreach ($localPath in @($localRuleSets.Values | Sort-Object -Unique)) {
+    $lineNumber = 0
+    foreach ($line in Get-Content -LiteralPath $localPath -Encoding UTF8) {
+        $lineNumber++
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#')) {
+            continue
+        }
+
+        $parts = @($trimmed.Split(',') | ForEach-Object { $_.Trim() })
+        $type = $parts[0].ToUpperInvariant()
+        if ($type -notin $managedAllowedTypes) {
+            $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber unsupported $type"
+            continue
+        }
+        if ($parts.Count -lt 2 -or -not $parts[1]) {
+            $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber missing value"
+            continue
+        }
+        if (@($parts | Select-Object -Skip 2 | Where-Object { $_ -in $reservedPolicies }).Count -gt 0) {
+            $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber embeds a policy"
+        }
+
+        if ($type -in @('IP-CIDR', 'IP-CIDR6')) {
+            $cidrParts = @($parts[1].Split('/'))
+            $parsedAddress = $null
+            $prefixLength = 0
+            $validAddress = $cidrParts.Count -eq 2 -and
+                [Net.IPAddress]::TryParse($cidrParts[0], [ref]$parsedAddress) -and
+                [int]::TryParse($cidrParts[1], [ref]$prefixLength)
+            if ($validAddress) {
+                $maxPrefix = if ($parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) { 32 } else { 128 }
+                $validAddress = $prefixLength -ge 0 -and $prefixLength -le $maxPrefix
+                if ($type -eq 'IP-CIDR6') {
+                    $validAddress = $validAddress -and
+                        $parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6
+                }
+            }
+            if (-not $validAddress) {
+                $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber invalid CIDR $($parts[1])"
+            }
+        }
+        elseif ($type -eq 'IP-ASN' -and $parts[1] -notmatch '^\d+$') {
+            $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber invalid ASN $($parts[1])"
+        }
+    }
+}
+$managedRuleDetail = if ($managedRuleErrors.Count) { $managedRuleErrors[0] } else { 'none' }
+$checks += Add-Check 'managed-rule-syntax' ($managedRuleErrors.Count -eq 0) "errors=$($managedRuleErrors.Count); first=$managedRuleDetail"
+
+$chinaDomainKeys = @{}
+foreach ($line in Get-Content -LiteralPath (Join-Path $rulesDir 'ChinaDomain.list') -Encoding UTF8) {
+    $parts = @($line.Trim().Split(',') | ForEach-Object { $_.Trim().ToLowerInvariant() })
+    if ($parts.Count -ge 2 -and $parts[0] -in @('domain', 'domain-suffix', 'domain-keyword')) {
+        $chinaDomainKeys["$($parts[0])|$($parts[1])"] = $true
+    }
+}
+$proxyDomainKeys = @{}
+foreach ($line in Get-Content -LiteralPath (Join-Path $rulesDir 'Proxy.list') -Encoding UTF8) {
+    $parts = @($line.Trim().Split(',') | ForEach-Object { $_.Trim().ToLowerInvariant() })
+    if ($parts.Count -ge 2 -and $parts[0] -in @('domain', 'domain-suffix', 'domain-keyword')) {
+        $proxyDomainKeys["$($parts[0])|$($parts[1])"] = $true
+    }
+}
+$actualBroadOverlaps = @($chinaDomainKeys.Keys | Where-Object { $proxyDomainKeys.ContainsKey($_) } | Sort-Object)
+$expectedBroadOverlaps = @(
+    'domain-suffix|apache.org',
+    'domain-suffix|bet365.com',
+    'domain-suffix|cnki.net',
+    'domain-suffix|cqvip.com',
+    'domain-suffix|dcocsp.cn',
+    'domain-suffix|infoq.com',
+    'domain-suffix|kuke.com',
+    'domain-suffix|kwai.com',
+    'domain-suffix|nssurge.com',
+    'domain-suffix|weather.com',
+    'domain-suffix|wikidot.com'
+) | Sort-Object
+$broadOverlapDiff = @(Compare-Object $expectedBroadOverlaps $actualBroadOverlaps)
+$checks += Add-Check 'broad-rule-overlap-audit' (
+    $broadOverlapDiff.Count -eq 0
+) "expected=$($expectedBroadOverlaps.Count); actual=$($actualBroadOverlaps.Count); diff=$($broadOverlapDiff.Count)"
 
 $ruleSetCache = @{}
 function Get-RuleSetRules {
@@ -428,6 +545,9 @@ $routeTests = [ordered]@{
     'store.steampowered.com' = 'Global'
     'www.apache.org' = 'Global'
     'community.oneplus.com' = 'Global'
+    'api.snapkit.com' = 'Final'
+    'cocacola.co.jp' = 'Global'
+    'engagements.appsflyer.com' = 'Final'
     'paypal-security-example.invalid' = 'Final'
     'leakproof.example.invalid' = 'Final'
 }

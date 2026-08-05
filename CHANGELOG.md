@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.1 - 2026-08-06
+
+- Added a high-priority TikTok User-Agent rule so the broad China set cannot claim unmatched TikTok traffic.
+- Tightened regional country-code filters to accept compact names such as `US01` without matching words such as `Australia` or `Russia`.
+- Removed unrelated Snap Kit, Coca-Cola, and shared AppsFlyer hosts from the TikTok policy snapshot.
+- Added negative regional-filter tests, managed rule syntax/CIDR validation, TikTok User-Agent validation, and an audited China/overseas overlap set.
+
 ## v2.1.0 - 2026-08-06
 
 - Added a dedicated TikTok group and separated international TikTok traffic from the Douyin/ByteDance domestic fallback.

@@ -1,10 +1,7 @@
 # 规则名称: TikTok
-# Active rules after local safety filters: 80
+# Active rules after local safety filters: 77
 
-DOMAIN,api.snapkit.com
-DOMAIN,cocacola.co.jp
 DOMAIN,courses.snapsolve.com
-DOMAIN,engagements.appsflyer.com
 DOMAIN,lf16-campaign.ttlstatic.com
 DOMAIN,lf16-csp.oecstatic.com
 DOMAIN,lf16-pkgcdn.pitaya-clientai.com

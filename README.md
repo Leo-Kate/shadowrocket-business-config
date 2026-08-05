@@ -29,7 +29,7 @@ Add a configuration from URL in Shadowrocket and paste the address above. Update
 | `Global` | `PROXY` | Other known overseas services |
 | `Final` | `PROXY` | Unmatched traffic |
 
-`Auto`, `Fallback`, `Hong Kong`, `Taiwan`, `Japan`, `Singapore`, `Korea`, and `United States` dynamically select nodes from the subscriptions already installed in Shadowrocket. Regional filters recognize common English, compact country-code, flag, and Chinese node names. No nodes are embedded in this repository.
+`Auto`, `Fallback`, `Hong Kong`, `Taiwan`, `Japan`, `Singapore`, `Korea`, and `United States` dynamically select nodes from the subscriptions already installed in Shadowrocket. Regional filters recognize common English, compact country-code, flag, and Chinese node names while preventing country codes inside longer words from matching the wrong region. No nodes are embedded in this repository.
 
 ## DNS And IPv6
 
