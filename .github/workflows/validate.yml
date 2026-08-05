@@ -13,7 +13,7 @@ jobs:
   validate:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate configuration and managed rules
         shell: pwsh
         run: ./scripts/validate-config.ps1
