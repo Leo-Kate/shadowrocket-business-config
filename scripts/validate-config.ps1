@@ -94,23 +94,22 @@ $sectionNames = ($sections | ForEach-Object { $_.Name }) -join ','
 $checks += Add-Check 'sections' ($sectionNames -eq 'General,Proxy Group,Rule,Host,URL Rewrite') $sectionNames
 
 $checks += Add-Check 'dns-main' (
-    $general['dns-server'] -match '^https://' -and
-    $general['dns-server'] -notmatch '\bsystem\b' -and
-    $general['dns-server'] -match '#proxy=DNS'
+    $general['dns-server'] -eq 'https://223.5.5.5/dns-query'
 ) $general['dns-server']
 $checks += Add-Check 'dns-fallback' (
-    $general['fallback-dns-server'] -match '^https://' -and
-    $general['fallback-dns-server'] -notmatch '\bsystem\b' -and
-    $general['fallback-dns-server'] -match '#proxy=DNS'
+    $general['fallback-dns-server'] -eq 'https://223.6.6.6/dns-query'
 ) $general['fallback-dns-server']
 $checks += Add-Check 'proxy-dns' (
-    $general['proxy-dns-server'] -match '^https://' -and
-    $general['proxy-dns-server'] -notmatch '\bsystem\b'
+    $general['proxy-dns-server'] -eq 'https://8.8.8.8/dns-query, https://1.1.1.1/dns-query'
 ) $general['proxy-dns-server']
 $checks += Add-Check 'dns-system-disabled' (
     $general['dns-fallback-system'] -eq 'false' -and
     $general['dns-direct-system'] -eq 'false'
 ) "fallback=$($general['dns-fallback-system']); direct=$($general['dns-direct-system'])"
+$checks += Add-Check 'dns-routing-separation' (
+    $general['dns-direct-fallback-proxy'] -eq 'false' -and
+    $general['use-local-host-item-for-proxy'] -eq 'false'
+) "direct-fallback=$($general['dns-direct-fallback-proxy']); proxy-local-map=$($general['use-local-host-item-for-proxy'])"
 $checks += Add-Check 'dns-hijack' ($general['hijack-dns'] -eq '*:53') $general['hijack-dns']
 $checks += Add-Check 'ipv6-disabled' (
     $general['ipv6'] -eq 'false' -and
@@ -221,6 +220,39 @@ foreach ($rule in $rules) {
 }
 $checks += Add-Check 'rule-references' ($ruleErrors.Count -eq 0) "errors=$($ruleErrors.Count)"
 
+$inlineCidrErrors = @()
+foreach ($rule in @($rules | Where-Object { $_.Type -in @('IP-CIDR', 'IP-CIDR6') })) {
+    $cidrParts = @($rule.Value.Split('/'))
+    $parsedAddress = $null
+    $prefixLength = 0
+    $validAddress = $cidrParts.Count -eq 2 -and
+        [Net.IPAddress]::TryParse($cidrParts[0], [ref]$parsedAddress) -and
+        [int]::TryParse($cidrParts[1], [ref]$prefixLength)
+
+    if ($validAddress) {
+        $isIpv4 = $parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
+        $maxPrefix = if ($isIpv4) { 32 } else { 128 }
+        $validAddress = $prefixLength -ge 0 -and $prefixLength -le $maxPrefix
+        $validAddress = $validAddress -and (
+            ($rule.Type -eq 'IP-CIDR' -and $isIpv4) -or
+            ($rule.Type -eq 'IP-CIDR6' -and -not $isIpv4)
+        )
+    }
+
+    if (-not $validAddress) {
+        $inlineCidrErrors += "Line $($rule.Line): $($rule.Raw)"
+    }
+}
+$checks += Add-Check 'inline-cidr-syntax' ($inlineCidrErrors.Count -eq 0) "errors=$($inlineCidrErrors.Count); first=$($inlineCidrErrors | Select-Object -First 1)"
+
+$inlineResolveErrors = @($rules | Where-Object {
+    $_.Type -in @('IP-CIDR', 'IP-CIDR6', 'IP-ASN') -and
+    $_.Raw -notmatch ',no-resolve$'
+})
+$checks += Add-Check 'inline-ip-no-resolve' (
+    $inlineResolveErrors.Count -eq 0
+) "errors=$($inlineResolveErrors.Count); first=$($inlineResolveErrors | Select-Object -First 1 -ExpandProperty Raw)"
+
 $finalRules = @($rules | Where-Object { $_.Type -eq 'FINAL' })
 $chinaGeoRules = @($rules | Where-Object { $_.Type -eq 'GEOIP' -and $_.Value.ToUpperInvariant() -eq 'CN' })
 $checks += Add-Check 'single-final' (
@@ -231,8 +263,9 @@ $checks += Add-Check 'single-final' (
 $checks += Add-Check 'geoip-cn' (
     $chinaGeoRules.Count -eq 1 -and
     $chinaGeoRules[0].Policy -eq 'Domestic' -and
+    $chinaGeoRules[0].Raw -match ',no-resolve$' -and
     $chinaGeoRules[0].Line -lt $finalRules[0].Line
-) "count=$($chinaGeoRules.Count); policy=$($chinaGeoRules[0].Policy)"
+) "count=$($chinaGeoRules.Count); policy=$($chinaGeoRules[0].Policy); rule=$($chinaGeoRules[0].Raw)"
 
 $legacyStartLine = [Array]::IndexOf($lines, '# Baidu/iqiyi') + 1
 $legacyEndLine = [Array]::IndexOf($lines, '# LAN') + 1
@@ -272,6 +305,29 @@ $checks += Add-Check 'tiktok-user-agent' (
 $microsoftSetRule = $rules | Where-Object {
     $_.Type -eq 'RULE-SET' -and $_.Value -match '/Microsoft\.list$'
 } | Select-Object -First 1
+$aiSetRules = @($rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/AI\.list$'
+})
+$broadGoogleRule = $rules | Where-Object {
+    $_.Type -eq 'DOMAIN-SUFFIX' -and
+    $_.Value.ToLowerInvariant() -eq 'google.com' -and
+    $_.Policy -eq 'Google'
+} | Select-Object -First 1
+$lastDomesticAiRule = $rules | Where-Object {
+    $_.Type -eq 'DOMAIN-SUFFIX' -and
+    $_.Value.ToLowerInvariant() -eq 'bigmodel.cn' -and
+    $_.Policy -eq 'Domestic'
+} | Select-Object -First 1
+$checks += Add-Check 'ai-rule-priority' (
+    $aiSetRules.Count -eq 1 -and
+    $null -ne $lastDomesticAiRule -and
+    $null -ne $broadGoogleRule -and
+    $null -ne $microsoftSetRule -and
+    $lastDomesticAiRule.Line -lt $aiSetRules[0].Line -and
+    $aiSetRules[0].Line -lt $broadGoogleRule.Line -and
+    $aiSetRules[0].Line -lt $microsoftSetRule.Line
+) "ai-count=$($aiSetRules.Count); domestic=$($lastDomesticAiRule.Line); ai=$($aiSetRules[0].Line); google=$($broadGoogleRule.Line); microsoft=$($microsoftSetRule.Line)"
+
 $aiAzureDomains = @(
     'openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net',
     'openaicomproductionae4b.blob.core.windows.net',
@@ -313,6 +369,7 @@ $checks += Add-Check 'rule-set-mirrors' ($ruleSetErrors.Count -eq 0) "sets=$($lo
 $checks += Add-Check 'managed-rule-count' ($localRuleSets.Count -eq 22) "sets=$($localRuleSets.Count)"
 
 $unsafeManagedRules = @(
+    @{ File = 'AI.list'; Rule = 'DOMAIN,api.github.com' },
     @{ File = 'PayPal.list'; Rule = 'DOMAIN-KEYWORD,paypal' },
     @{ File = 'Prevent_DNS_Leaks.list'; Rule = 'DOMAIN-KEYWORD,leak' },
     @{ File = 'Proxy.list'; Rule = 'DOMAIN-KEYWORD,leak' },
@@ -335,6 +392,29 @@ foreach ($entry in $unsafeManagedRules) {
     }
 }
 $checks += Add-Check 'managed-rule-safety-filters' ($unsafeManagedHits.Count -eq 0) "hits=$($unsafeManagedHits.Count)"
+
+$requiredAiRules = @(
+    'DOMAIN-SUFFIX,anthropic.com',
+    'DOMAIN-SUFFIX,claude.ai',
+    'DOMAIN-SUFFIX,claudeusercontent.com',
+    'DOMAIN-SUFFIX,gemini.google.com',
+    'DOMAIN-SUFFIX,githubcopilot.com',
+    'DOMAIN,copilotprodattachments.blob.core.windows.net',
+    'DOMAIN-SUFFIX,copilot.cloud.microsoft',
+    'DOMAIN-SUFFIX,perplexity.ai',
+    'DOMAIN-SUFFIX,pplx.ai',
+    'DOMAIN-SUFFIX,grok.x.com',
+    'DOMAIN-SUFFIX,mistral.ai',
+    'DOMAIN-SUFFIX,huggingface.co'
+)
+$aiRulePath = Join-Path $rulesDir 'AI.list'
+$activeAiRules = @(
+    Get-Content -LiteralPath $aiRulePath -Encoding UTF8 |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') }
+)
+$missingAiRules = @($requiredAiRules | Where-Object { $_ -notin $activeAiRules })
+$checks += Add-Check 'managed-ai-coverage' ($missingAiRules.Count -eq 0) "missing=$($missingAiRules.Count); first=$($missingAiRules | Select-Object -First 1)"
 
 $managedAllowedTypes = @(
     'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD',
@@ -374,12 +454,13 @@ foreach ($localPath in @($localRuleSets.Values | Sort-Object -Unique)) {
                 [Net.IPAddress]::TryParse($cidrParts[0], [ref]$parsedAddress) -and
                 [int]::TryParse($cidrParts[1], [ref]$prefixLength)
             if ($validAddress) {
-                $maxPrefix = if ($parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) { 32 } else { 128 }
+                $isIpv4 = $parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork
+                $maxPrefix = if ($isIpv4) { 32 } else { 128 }
                 $validAddress = $prefixLength -ge 0 -and $prefixLength -le $maxPrefix
-                if ($type -eq 'IP-CIDR6') {
-                    $validAddress = $validAddress -and
-                        $parsedAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6
-                }
+                $validAddress = $validAddress -and (
+                    ($type -eq 'IP-CIDR' -and $isIpv4) -or
+                    ($type -eq 'IP-CIDR6' -and -not $isIpv4)
+                )
             }
             if (-not $validAddress) {
                 $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber invalid CIDR $($parts[1])"
@@ -387,6 +468,10 @@ foreach ($localPath in @($localRuleSets.Values | Sort-Object -Unique)) {
         }
         elseif ($type -eq 'IP-ASN' -and $parts[1] -notmatch '^\d+$') {
             $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber invalid ASN $($parts[1])"
+        }
+
+        if ($type -in @('IP-CIDR', 'IP-CIDR6', 'IP-ASN') -and 'no-resolve' -notin $parts) {
+            $managedRuleErrors += "$(Split-Path -Leaf $localPath):$lineNumber missing no-resolve"
         }
     }
 }
@@ -498,6 +583,12 @@ function Find-DomainPolicy {
 
 $routeTests = [ordered]@{
     'weixin.qq.com' = 'Domestic'
+    'long.weixin.qq.com' = 'Domestic'
+    'short.weixin.qq.com' = 'Domestic'
+    'mmsns.qpic.cn' = 'Domestic'
+    'mmbiz.qpic.cn' = 'Domestic'
+    'vweixinf.tc.qq.com' = 'Domestic'
+    'apd-pcdnwxlogin.teg.tencent-cloud.net' = 'Domestic'
     'www.alipay.com' = 'Domestic'
     'www.paypal.com' = 'PayPal'
     'api.braintreegateway.com' = 'PayPal'
@@ -518,6 +609,17 @@ $routeTests = [ordered]@{
     'www.cqvip.com' = 'Domestic'
     'www.kuke.com' = 'Domestic'
     'c.mi.com' = 'Domestic'
+    'chat.deepseek.com' = 'Domestic'
+    'www.doubao.com' = 'Domestic'
+    'ark.cn-beijing.volces.com' = 'Domestic'
+    'www.volcengine.com' = 'Domestic'
+    'www.coze.cn' = 'Domestic'
+    'kimi.moonshot.cn' = 'Domestic'
+    'www.kimi.com' = 'Domestic'
+    'www.tongyi.com' = 'Domestic'
+    'www.qianwen.com' = 'Domestic'
+    'chat.qwen.ai' = 'Domestic'
+    'open.bigmodel.cn' = 'Domestic'
     'www.apple.com' = 'Apple'
     'www.outlook.com' = 'Microsoft'
     'mail.google.com' = 'Google'
@@ -537,6 +639,47 @@ $routeTests = [ordered]@{
     'api.telegram.org' = 'Telegram'
     'chatgpt.com' = 'AI'
     'api.openai.com' = 'AI'
+    'claude.ai' = 'AI'
+    'claude.com' = 'AI'
+    'api.anthropic.com' = 'AI'
+    'openrouter.ai' = 'AI'
+    'www.meta.ai' = 'AI'
+    'www.grok.com' = 'AI'
+    'api.cohere.com' = 'AI'
+    'character.ai' = 'AI'
+    'aida.googleapis.com' = 'AI'
+    'aisandbox-pa.googleapis.com' = 'AI'
+    'alkalicore-pa.clients6.google.com' = 'AI'
+    'daily-cloudcode-pa.googleapis.com' = 'AI'
+    'jules.google.com' = 'AI'
+    'robinfrontend-pa.googleapis.com' = 'AI'
+    'aistudio.google.com' = 'AI'
+    'bard.google.com' = 'AI'
+    'cloudcode-pa.googleapis.com' = 'AI'
+    'geller-pa.googleapis.com' = 'AI'
+    'gemini.google.com' = 'AI'
+    'generativelanguage.googleapis.com' = 'AI'
+    'makersuite.google.com' = 'AI'
+    'notebooklm.google.com' = 'AI'
+    'proactivebackend-pa.googleapis.com' = 'AI'
+    'cdn.claudeusercontent.com' = 'AI'
+    'bridge.claudemcpclient.com' = 'AI'
+    'api.githubcopilot.com' = 'AI'
+    'copilot-proxy.githubusercontent.com' = 'AI'
+    'copilotprodattachments.blob.core.windows.net' = 'AI'
+    'copilot.cloud.microsoft' = 'AI'
+    'sydney.bing.com' = 'AI'
+    'edgeservices.bing.com' = 'AI'
+    'www.perplexity.com' = 'AI'
+    'cdn.pplx.ai' = 'AI'
+    'grok.x.com' = 'AI'
+    'api.mistral.ai' = 'AI'
+    'huggingface.co' = 'AI'
+    'www.midjourney.com' = 'AI'
+    'api.elevenlabs.io' = 'AI'
+    'www.cursor.com' = 'AI'
+    'www.suno.com' = 'AI'
+    'www.manus.im' = 'AI'
     'openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net' = 'AI'
     'openaicomproductionae4b.blob.core.windows.net' = 'AI'
     'production-openaicom-storage.azureedge.net' = 'AI'
@@ -566,6 +709,9 @@ $routeTests = [ordered]@{
     'www.temu.com' = 'Global'
     'www.shein.com' = 'Global'
     'www.github.com' = 'Global'
+    'api.github.com' = 'Global'
+    'www.microsoft.com' = 'Microsoft'
+    'www.meta.com' = 'Social'
     'www.discord.com' = 'Global'
     'www.amazon.com' = 'Global'
     'www.wikipedia.org' = 'Global'
@@ -589,6 +735,33 @@ foreach ($entry in $routeTests.GetEnumerator()) {
 }
 $routeDetail = if ($routeFailures.Count -gt 0) { $routeFailures -join ' | ' } else { 'none' }
 $checks += Add-Check 'representative-routing' ($routeFailures.Count -eq 0) "tests=$($routeTests.Count); errors=$($routeFailures.Count); $routeDetail"
+
+$aiManagedRouteFailures = @()
+$aiManagedDomainRules = if ($aiSetRules.Count -eq 1) {
+    @(
+        Get-RuleSetRules $aiSetRules[0].Value |
+            Where-Object { $_.Type -in @('DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD') }
+    )
+}
+else {
+    @()
+    $aiManagedRouteFailures += "AI rule-set count is $($aiSetRules.Count)"
+}
+foreach ($rule in $aiManagedDomainRules) {
+    $probeDomain = if ($rule.Type -eq 'DOMAIN-KEYWORD' -and -not $rule.Value.Contains('.')) {
+        "probe-$($rule.Value).example"
+    }
+    else {
+        $rule.Value
+    }
+    $actual = Find-DomainPolicy $probeDomain
+    if ($actual -ne 'AI') {
+        $aiManagedRouteFailures += "$probeDomain via $($rule.Type): got $actual"
+    }
+}
+$checks += Add-Check 'managed-ai-first-match' (
+    $aiManagedRouteFailures.Count -eq 0
+) "tests=$($aiManagedDomainRules.Count); errors=$($aiManagedRouteFailures.Count); first=$($aiManagedRouteFailures | Select-Object -First 1)"
 
 $dnsAddresses = @(
     '8.8.8.8/32', '8.8.4.4/32', '1.1.1.1/32', '1.0.0.1/32',

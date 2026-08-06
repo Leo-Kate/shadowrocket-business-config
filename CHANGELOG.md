@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.3 - 2026-08-06
+
+- Changed DIRECT-domain resolution from proxy-exit DoH to AliDNS IP-literal DoH so WeChat and other mainland services receive local CDN answers without using ISP DNS.
+- Kept proxy-domain resolution remote, retained encrypted Google/Cloudflare node-hostname DNS, and added `no-resolve` to China IP and `GEOIP,CN` rules to prevent local lookups during IP classification.
+- Moved the AI managed set before broad Google and Microsoft rules, expanded it to 120 curated rules for Claude, Gemini, Copilot, Perplexity, Grok, Mistral, and other overseas AI services, and removed the generic GitHub API from the AI group.
+- Added explicit DIRECT coverage for major mainland AI services including DeepSeek, Doubao, Kimi, Qwen, and Zhipu.
+- Corrected preserved Apple and Telegram IPv6 ranges from `IP-CIDR` to `IP-CIDR6` and added inline address-family validation.
+- Expanded validation to 46 structural checks, 142 representative routes, and all 119 managed AI domain/keyword first matches.
+
 ## v2.1.2 - 2026-08-06
 
 - Added explicit high-priority routing for Azure-backed OpenAI endpoints so broad Microsoft Azure rules cannot capture them after an upstream rule refresh.
