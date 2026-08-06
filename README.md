@@ -72,6 +72,8 @@ The local `rules/` snapshots are sourced from the MIT-licensed [Repcz/Tool](http
 
 ## Maintenance
 
+GitHub checks upstream managed rules every Monday at 11:23 Asia/Shanghai. A change must pass the complete validator before the automation updates the single `automation/managed-rules` review pull request. The workflow never pushes an upstream refresh directly to `main`, so the fixed subscription URL changes only after review.
+
 Refresh managed rule snapshots from their upstream source:
 
 ```powershell

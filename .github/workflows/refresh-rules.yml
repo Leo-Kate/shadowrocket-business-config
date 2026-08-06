@@ -1,0 +1,94 @@
+name: Refresh managed Shadowrocket rules
+
+on:
+  schedule:
+    # Monday 11:23 Asia/Shanghai. A non-round minute reduces scheduler delays.
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: shadowrocket-managed-rule-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Refresh upstream snapshots
+        shell: pwsh
+        run: ./scripts/update-rules.ps1
+
+      - name: Validate refreshed configuration and rules
+        shell: pwsh
+        run: ./scripts/validate-config.ps1
+
+      - name: Detect reviewed file scope
+        id: changes
+        shell: pwsh
+        run: |
+          $changedFiles = @(git diff --name-only)
+          $unexpectedFiles = @($changedFiles | Where-Object { $_ -notlike 'rules/*' })
+          if ($unexpectedFiles.Count -gt 0) {
+            throw "Rule refresh changed files outside rules/: $($unexpectedFiles -join ', ')"
+          }
+
+          $hasChanges = $changedFiles.Count -gt 0
+          "changed=$($hasChanges.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "### Managed rule refresh" >> $env:GITHUB_STEP_SUMMARY
+          if ($hasChanges) {
+            "Validated changes: $($changedFiles.Count) file(s)." >> $env:GITHUB_STEP_SUMMARY
+            $changedFiles | ForEach-Object { "- ``$_``" >> $env:GITHUB_STEP_SUMMARY }
+          }
+          else {
+            "No upstream changes detected." >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Update the managed review pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = 'automation/managed-rules'
+          $title = 'Refresh managed Shadowrocket rules'
+          $body = @"
+          Automated weekly refresh of the mirrored Shadowrocket rule snapshots.
+
+          Safety gates completed before this pull request was updated:
+
+          - local curation and exclusions reapplied
+          - configuration and managed-rule syntax validated
+          - domestic/overseas priority and representative routing validated
+          - AI first-match coverage validated
+          - node-secret scan passed
+
+          This pull request is intentionally not auto-merged. Review the upstream diff before publishing it to the fixed subscription URL.
+
+          Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          "@
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C $branch
+          git add -- rules
+          git commit -m 'Refresh managed Shadowrocket rules'
+          git push --force origin "HEAD:refs/heads/$branch"
+
+          $pullRequest = gh pr list --base main --head $branch --state open --json number --jq '.[0].number'
+          if ($pullRequest) {
+            gh pr edit $pullRequest --title $title --body $body
+            "Updated pull request #$pullRequest." >> $env:GITHUB_STEP_SUMMARY
+          }
+          else {
+            $url = gh pr create --base main --head $branch --title $title --body $body
+            "Created pull request: $url" >> $env:GITHUB_STEP_SUMMARY
+          }
