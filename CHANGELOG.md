@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.2 - 2026-08-06
+
+- Added explicit high-priority routing for Azure-backed OpenAI endpoints so broad Microsoft Azure rules cannot capture them after an upstream rule refresh.
+- Added four OpenAI Azure regression routes and a priority assertion to the validator.
+
 ## v2.1.1 - 2026-08-06
 
 - Added a high-priority TikTok User-Agent rule so the broad China set cannot claim unmatched TikTok traffic.

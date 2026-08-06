@@ -269,6 +269,30 @@ $checks += Add-Check 'tiktok-user-agent' (
     $tiktokUserAgentRules[0].Line -lt $chinaDomainSetRule.Line
 ) "count=$($tiktokUserAgentRules.Count); line=$($tiktokUserAgentRules[0].Line); china-domain=$($chinaDomainSetRule.Line)"
 
+$microsoftSetRule = $rules | Where-Object {
+    $_.Type -eq 'RULE-SET' -and $_.Value -match '/Microsoft\.list$'
+} | Select-Object -First 1
+$aiAzureDomains = @(
+    'openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net',
+    'openaicomproductionae4b.blob.core.windows.net',
+    'production-openaicom-storage.azureedge.net',
+    'openaiapi-site.azureedge.net'
+)
+$aiAzureOverrideErrors = @()
+foreach ($domain in $aiAzureDomains) {
+    $matches = @($rules | Where-Object {
+        $_.Policy -eq 'AI' -and
+        $_.Value.ToLowerInvariant() -eq $domain -and
+        $_.Line -lt $microsoftSetRule.Line
+    })
+    if ($matches.Count -ne 1) {
+        $aiAzureOverrideErrors += "$domain matches=$($matches.Count)"
+    }
+}
+$checks += Add-Check 'ai-azure-overrides' (
+    $null -ne $microsoftSetRule -and $aiAzureOverrideErrors.Count -eq 0
+) "errors=$($aiAzureOverrideErrors.Count); microsoft-line=$($microsoftSetRule.Line); first=$($aiAzureOverrideErrors | Select-Object -First 1)"
+
 $localRuleSets = @{}
 $ruleSetErrors = @()
 foreach ($rule in @($rules | Where-Object { $_.Type -eq 'RULE-SET' })) {
@@ -513,6 +537,10 @@ $routeTests = [ordered]@{
     'api.telegram.org' = 'Telegram'
     'chatgpt.com' = 'AI'
     'api.openai.com' = 'AI'
+    'openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net' = 'AI'
+    'openaicomproductionae4b.blob.core.windows.net' = 'AI'
+    'production-openaicom-storage.azureedge.net' = 'AI'
+    'openaiapi-site.azureedge.net' = 'AI'
     'copilot.microsoft.com' = 'AI'
     'www.netflix.com' = 'Streaming'
     'www.disneyplus.com' = 'Streaming'

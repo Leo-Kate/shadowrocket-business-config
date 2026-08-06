@@ -42,7 +42,7 @@ Add a configuration from URL in Shadowrocket and paste the address above. Update
 - `block-quic = all-proxy` prevents proxied UDP/443 from bypassing an incompatible node.
 - `ipv6 = false` and `prefer-ipv6 = false` prevent application IPv6 bypass.
 
-Application-owned DoH is HTTPS traffic and cannot be generically rewritten without TLS interception. Known providers are pinned to `DNS`; unknown providers fall through the overseas rules and `Final`, both of which default to `PROXY`.
+Application-owned DoH is HTTPS traffic and cannot be generically rewritten without TLS interception. Known providers are pinned to `DNS`; unknown providers fall through the overseas rules and `Final`, both of which default to `PROXY`. Azure-backed OpenAI endpoints are explicitly placed before the broad Microsoft Azure set so ChatGPT traffic stays in `AI` after managed-rule updates.
 
 ## Routing Layers
 
