@@ -20,10 +20,12 @@ DOMAIN-SUFFIX,anthropic.com
 DOMAIN-SUFFIX,bard.google.com
 DOMAIN-SUFFIX,chat.com
 DOMAIN-SUFFIX,chatgpt.com
+DOMAIN-SUFFIX,chatgpt.site
 DOMAIN-SUFFIX,claude.ai
 DOMAIN-SUFFIX,claude.com
 DOMAIN-SUFFIX,clipdrop.co
 DOMAIN-SUFFIX,cloudcode-pa.googleapis.com
+DOMAIN-SUFFIX,cursor.sh
 DOMAIN-SUFFIX,deepmind.com
 DOMAIN-SUFFIX,deepmind.google
 DOMAIN-SUFFIX,dify.ai
@@ -53,7 +55,6 @@ URL-REGEX,https://www\.google\.com/.*continue=https://gemini\.google\.com.+
 
 # Locally maintained high-confidence overseas AI services
 DOMAIN-SUFFIX,oaistatsig.com
-DOMAIN-SUFFIX,chatgpt.site
 DOMAIN-SUFFIX,crixet.com
 DOMAIN-SUFFIX,claudeusercontent.com
 DOMAIN-SUFFIX,clau.de
@@ -99,7 +100,6 @@ DOMAIN-SUFFIX,elevenlabs.io
 DOMAIN-SUFFIX,replicate.com
 DOMAIN-SUFFIX,together.ai
 DOMAIN-SUFFIX,cursor.com
-DOMAIN-SUFFIX,cursor.sh
 DOMAIN-SUFFIX,codeium.com
 DOMAIN-SUFFIX,windsurf.com
 DOMAIN-SUFFIX,suno.com
