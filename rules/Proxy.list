@@ -1,5 +1,5 @@
 # 规则名称: Proxy
-# Active rules after local safety filters: 17543
+# Active rules after local safety filters: 17545
 
 DOMAIN,api.avax.network
 DOMAIN,api.revenuecat.com
@@ -2542,6 +2542,7 @@ DOMAIN-SUFFIX,boundhub.com
 DOMAIN-SUFFIX,bountyhunterporn.com
 DOMAIN-SUFFIX,box.com
 DOMAIN-SUFFIX,box.net
+DOMAIN-SUFFIX,boxcloud.com
 DOMAIN-SUFFIX,boxofficemojo.com
 DOMAIN-SUFFIX,boxpn.com
 DOMAIN-SUFFIX,boxun.tv
@@ -14283,6 +14284,7 @@ DOMAIN-SUFFIX,todoist.com
 DOMAIN-SUFFIX,togetter.com
 DOMAIN-SUFFIX,toggleable.com
 DOMAIN-SUFFIX,toh.info
+DOMAIN-SUFFIX,tokens.ci
 DOMAIN-SUFFIX,tokto-motion.net
 DOMAIN-SUFFIX,tokyo-247.com
 DOMAIN-SUFFIX,tokyo-hot.com
