@@ -1,5 +1,5 @@
 # 规则名称: AI
-# Active rules after local curation: 120
+# Active rules after local curation: 123
 
 DOMAIN,ai.google.dev
 DOMAIN,aida.googleapis.com
@@ -11,19 +11,25 @@ DOMAIN,api.jetbrains.ai
 DOMAIN,daily-cloudcode-pa.googleapis.com
 DOMAIN,file.oaiusercontent.com
 DOMAIN,gateway.ai.cloudflare.com
+DOMAIN,inference.codeium.com
 DOMAIN,jules.google.com
 DOMAIN,openrouter.ai
 DOMAIN,robinfrontend-pa.googleapis.com
+DOMAIN,server.codeium.com
+DOMAIN,server.self-serve.windsurf.com
 DOMAIN-SUFFIX,ai.com
 DOMAIN-SUFFIX,aistudio.google.com
 DOMAIN-SUFFIX,anthropic.com
 DOMAIN-SUFFIX,bard.google.com
 DOMAIN-SUFFIX,chat.com
 DOMAIN-SUFFIX,chatgpt.com
+DOMAIN-SUFFIX,chatgpt.site
+DOMAIN-SUFFIX,clau.de
 DOMAIN-SUFFIX,claude.ai
 DOMAIN-SUFFIX,claude.com
 DOMAIN-SUFFIX,clipdrop.co
 DOMAIN-SUFFIX,cloudcode-pa.googleapis.com
+DOMAIN-SUFFIX,cursor.sh
 DOMAIN-SUFFIX,deepmind.com
 DOMAIN-SUFFIX,deepmind.google
 DOMAIN-SUFFIX,dify.ai
@@ -53,10 +59,8 @@ URL-REGEX,https://www\.google\.com/.*continue=https://gemini\.google\.com.+
 
 # Locally maintained high-confidence overseas AI services
 DOMAIN-SUFFIX,oaistatsig.com
-DOMAIN-SUFFIX,chatgpt.site
 DOMAIN-SUFFIX,crixet.com
 DOMAIN-SUFFIX,claudeusercontent.com
-DOMAIN-SUFFIX,clau.de
 DOMAIN-SUFFIX,claudemcpclient.com
 DOMAIN-SUFFIX,claudemcpcontent.com
 DOMAIN-SUFFIX,gemini.gstatic.com
@@ -99,7 +103,6 @@ DOMAIN-SUFFIX,elevenlabs.io
 DOMAIN-SUFFIX,replicate.com
 DOMAIN-SUFFIX,together.ai
 DOMAIN-SUFFIX,cursor.com
-DOMAIN-SUFFIX,cursor.sh
 DOMAIN-SUFFIX,codeium.com
 DOMAIN-SUFFIX,windsurf.com
 DOMAIN-SUFFIX,suno.com
