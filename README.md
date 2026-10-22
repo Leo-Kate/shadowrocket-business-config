@@ -29,14 +29,14 @@ Add a configuration from URL in Shadowrocket and paste the address above. Update
 | `Global` | `PROXY` | Other known overseas services |
 | `Final` | `PROXY` | Unmatched traffic |
 
-`Auto`, `Fallback`, `Hong Kong`, `Taiwan`, `Japan`, `Singapore`, `Korea`, and `United States` dynamically select nodes from the subscriptions already installed in Shadowrocket. Regional filters recognize common English, compact country-code, flag, and Chinese node names while preventing country codes inside longer words from matching the wrong region. No nodes are embedded in this repository.
+`Auto`, `Fallback`, `Hong Kong`, `Taiwan`, `Japan`, `Singapore`, `Korea`, and `United States` remain available as optional node views, but overseas categories no longer reference them. Those views dynamically select nodes from the subscriptions already installed in Shadowrocket. Regional filters recognize common English, compact country-code, flag, and Chinese node names while preventing country codes inside longer words from matching the wrong region. No nodes are embedded in this repository.
 
 ## Required Shadowrocket Mode
 
 - Set Shadowrocket global routing to `Configuration` (`配置`), not `Proxy` (`代理`).
 - `Domestic` and `PayPal` are pinned to `DIRECT`. PayPal and ToDesk domains also use literal `DIRECT` rules before every remote rule set, so an old saved group selection cannot send them to a proxy.
 - Update this configuration from its existing URL, activate it, and reconnect Shadowrocket once to close old proxy connections.
-- Confirm `Apple`, `Microsoft`, `Google`, `AI`, `Social`, `Telegram`, `YouTube`, `TikTok`, `Streaming`, `DNS`, `Global`, and `Final` are set to `PROXY` or the intended proxy node group.
+- Overseas categories, including `Social`, `TikTok`, `Telegram`, `YouTube`, `DNS`, `Global`, and `Final`, are pinned to `PROXY`. Select the intended fixed node on the home screen for each device; a failed proxy does not fall back to DIRECT.
 - Shadowrocket can retain an old manual policy selection after a subscription update. The `policy-select-name` values define clean-import defaults but do not override a selection already saved by the app.
 
 ## DNS And IPv6
@@ -83,6 +83,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\update-rules.ps1
 ```
 
 Review the diff and run routing validation before committing. The `v1.0.0` Git tag is the original rollback point.
+
+This profile controls traffic while Shadowrocket is active in Configuration mode. It is not an OS-level always-on VPN or a kill switch when the VPN is stopped. Actual public IP, DNS, and IPv6 behavior must be verified on each device and network; DNS resolver IPs do not have to equal the proxy exit IP. Domestic and explicit DIRECT services intentionally use the local network.
 
 GitHub Actions runs the same configuration validator on every push and pull request, so future rule changes cannot reach `main` with broken policy references, routing order, or representative service regressions.
 

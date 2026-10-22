@@ -1,3 +1,10 @@
+# v2.2.1 — 2026-10-23
+
+- Pin overseas categories, social media, and application DNS to the device's selected PROXY node.
+- Remove category-specific automatic and regional choices so saved group selections cannot rotate the exit independently.
+- Retain encrypted split DNS, unsupported-UDP rejection, IPv6 settings, and mandatory PayPal/ToDesk DIRECT rules.
+- Validate fixed-node routing across all overseas categories and reject UDP-to-DIRECT fallback.
+
 # v2.2.0 — 2026-10-23
 
 - Pin PayPal and ToDesk domains to literal DIRECT before remote rule sets.

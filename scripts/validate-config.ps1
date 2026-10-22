@@ -152,6 +152,13 @@ foreach ($name in @('Domestic', 'PayPal')) {
         $groups[$name].Members.Count -eq 1 -and $groups[$name].Members[0] -eq 'DIRECT'
     ) ($groups[$name].Members -join ',')
 }
+# A single selected node must carry every overseas category, including app-owned DNS.
+foreach ($name in @('Apple', 'Microsoft', 'Google', 'AI', 'Social', 'Telegram', 'YouTube', 'TikTok', 'Streaming', 'DNS', 'Global', 'Final')) {
+    $checks += Add-Check "fixed-proxy-$name" (
+        $groups[$name].Members.Count -eq 1 -and $groups[$name].Members[0] -eq 'PROXY'
+    ) ($groups[$name].Members -join ',')
+}
+$checks += Add-Check 'udp-no-direct-fallback' ($general['udp-policy-not-supported-behaviour'] -eq 'REJECT') $general['udp-policy-not-supported-behaviour']
 $criticalDomains = @('paypal.com', 'paypalobjects.com', 'paypal.cn', 'paypal.me', 'paypalcorp.com', 'paypal-mktg.com', 'paypal.work', 'todesk.com')
 $firstRemoteSet = ($rules | Where-Object { $_.Type -eq 'RULE-SET' } | Select-Object -First 1).Line
 foreach ($domain in $criticalDomains) {
