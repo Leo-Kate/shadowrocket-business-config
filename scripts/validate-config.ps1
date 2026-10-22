@@ -120,8 +120,8 @@ $checks += Add-Check 'quic-proxy-block' ($general['block-quic'] -eq 'all-proxy')
 $expectedDefaults = [ordered]@{
     Domestic = 'DIRECT'
     PayPal = 'DIRECT'
-    Apple = 'DIRECT'
-    Microsoft = 'DIRECT'
+    Apple = 'PROXY'
+    Microsoft = 'PROXY'
     Google = 'PROXY'
     AI = 'PROXY'
     Social = 'PROXY'
@@ -145,6 +145,25 @@ foreach ($entry in $expectedDefaults.GetEnumerator()) {
     $actual = if ($defaultOption) { ([string]$defaultOption).Split('=', 2)[1] } else { '' }
     $checks += Add-Check "group-$($entry.Key)" ($exists -and $actual -eq $entry.Value) "default=$actual"
 }
+
+# Critical applications must not depend on a mutable policy selection.
+foreach ($name in @('Domestic', 'PayPal')) {
+    $checks += Add-Check "pinned-$name" (
+        $groups[$name].Members.Count -eq 1 -and $groups[$name].Members[0] -eq 'DIRECT'
+    ) ($groups[$name].Members -join ',')
+}
+$criticalDomains = @('paypal.com', 'paypalobjects.com', 'paypal.cn', 'paypal.me', 'paypalcorp.com', 'paypal-mktg.com', 'paypal.work', 'todesk.com')
+$firstRemoteSet = ($rules | Where-Object { $_.Type -eq 'RULE-SET' } | Select-Object -First 1).Line
+foreach ($domain in $criticalDomains) {
+    $first = $rules | Where-Object { $_.Type -eq 'DOMAIN-SUFFIX' -and $_.Value -eq $domain } | Select-Object -First 1
+    $checks += Add-Check "mandatory-$domain" (
+        $null -ne $first -and $first.Policy -eq 'DIRECT' -and $first.Line -lt $firstRemoteSet
+    ) "policy=$($first.Policy); line=$($first.Line)"
+}
+$proxyGroupsWithDirect = @($groups.Values | Where-Object {
+    $_.Type -eq 'select' -and $_.Name -notin @('Domestic', 'PayPal') -and 'DIRECT' -in $_.Members
+})
+$checks += Add-Check 'overseas-no-direct-fallback' ($proxyGroupsWithDirect.Count -eq 0) "groups=$($proxyGroupsWithDirect.Count)"
 
 $reservedPolicies = @('DIRECT', 'PROXY', 'REJECT', 'REJECT-NO-DROP', 'REJECT-TINYGIF')
 $groupReferenceErrors = @()
@@ -582,16 +601,30 @@ function Find-DomainPolicy {
 }
 
 $routeTests = [ordered]@{
-    'weixin.qq.com' = 'Domestic'
-    'long.weixin.qq.com' = 'Domestic'
-    'short.weixin.qq.com' = 'Domestic'
+    'todesk.com' = 'DIRECT'
+    'api.todesk.com' = 'DIRECT'
+    'resource.todesk.com' = 'DIRECT'
+    'www.paypal.work' = 'DIRECT'
+    'www.paypalcorp.com' = 'DIRECT'
+    'www.paypal.com.cn' = 'DIRECT'
+    'notpaypal.com' = 'Final'
+    'paypal.com.example.invalid' = 'Final'
+    'todesk.com.example.invalid' = 'Final'
+    'www.wegame.com' = 'DIRECT'
+    'auth.riotgames.com' = 'DIRECT'
+    'www.apple.com.cn' = 'DIRECT'
+    'my.mdkj.lol' = 'Global'
+    'vip.mdkj.lol' = 'Global'
+    'weixin.qq.com' = 'DIRECT'
+    'long.weixin.qq.com' = 'DIRECT'
+    'short.weixin.qq.com' = 'DIRECT'
     'mmsns.qpic.cn' = 'Domestic'
     'mmbiz.qpic.cn' = 'Domestic'
-    'vweixinf.tc.qq.com' = 'Domestic'
-    'apd-pcdnwxlogin.teg.tencent-cloud.net' = 'Domestic'
+    'vweixinf.tc.qq.com' = 'DIRECT'
+    'apd-pcdnwxlogin.teg.tencent-cloud.net' = 'DIRECT'
     'www.alipay.com' = 'Domestic'
-    'www.paypal.com' = 'PayPal'
-    'api.braintreegateway.com' = 'PayPal'
+    'www.paypal.com' = 'DIRECT'
+    'api.braintreegateway.com' = 'DIRECT'
     'www.douyin.com' = 'Domestic'
     'www.bytedance.com' = 'Domestic'
     'www.taobao.com' = 'Domestic'

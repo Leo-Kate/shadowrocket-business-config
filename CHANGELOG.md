@@ -1,3 +1,10 @@
+# v2.2.0 — 2026-10-23
+
+- Pin PayPal and ToDesk domains to literal DIRECT before remote rule sets.
+- Pin domestic routing to DIRECT and prevent cached DIRECT selections in overseas groups.
+- Carry Tencent/game exceptions and the mdkj.lol proxy exception into the original configuration URL.
+- Add routing and priority regressions; preserve existing managed-rule maintenance.
+
 # Changelog
 
 ## v2.1.3 - 2026-08-06

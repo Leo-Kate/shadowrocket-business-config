@@ -15,9 +15,9 @@ Add a configuration from URL in Shadowrocket and paste the address above. Update
 | Group | Default | Purpose |
 | --- | --- | --- |
 | `Domestic` | `DIRECT` | Mainland China services and `GEOIP,CN` |
-| `PayPal` | `DIRECT` | China-account PayPal traffic, independently switchable |
-| `Apple` | `DIRECT` | Apple and iCloud services |
-| `Microsoft` | `DIRECT` | Microsoft, Office, Outlook, and Windows services |
+| `PayPal` | `DIRECT` | Mandatory DIRECT for PayPal; rules use literal DIRECT |
+| `Apple` | `PROXY` | Apple and iCloud services |
+| `Microsoft` | `PROXY` | Microsoft, Office, Outlook, and Windows services |
 | `Google` | `PROXY` | Google and Gmail |
 | `AI` | `PROXY` | OpenAI, Claude, Gemini, Copilot, and other overseas AI services |
 | `Social` | `PROXY` | Meta, Instagram, Threads, Reddit, WhatsApp, X, and LinkedIn |
@@ -34,8 +34,9 @@ Add a configuration from URL in Shadowrocket and paste the address above. Update
 ## Required Shadowrocket Mode
 
 - Set Shadowrocket global routing to `Configuration` (`配置`), not `Proxy` (`代理`).
-- Confirm `Domestic`, `PayPal`, `Apple`, and `Microsoft` are set to `DIRECT`.
-- Confirm `Google`, `AI`, `Social`, `Telegram`, `YouTube`, `TikTok`, `Streaming`, `DNS`, `Global`, and `Final` are set to `PROXY` or the intended proxy node group.
+- `Domestic` and `PayPal` are pinned to `DIRECT`. PayPal and ToDesk domains also use literal `DIRECT` rules before every remote rule set, so an old saved group selection cannot send them to a proxy.
+- Update this configuration from its existing URL, activate it, and reconnect Shadowrocket once to close old proxy connections.
+- Confirm `Apple`, `Microsoft`, `Google`, `AI`, `Social`, `Telegram`, `YouTube`, `TikTok`, `Streaming`, `DNS`, `Global`, and `Final` are set to `PROXY` or the intended proxy node group.
 - Shadowrocket can retain an old manual policy selection after a subscription update. The `policy-select-name` values define clean-import defaults but do not override a selection already saved by the app.
 
 ## DNS And IPv6
@@ -56,15 +57,16 @@ Application-owned DoH is HTTPS traffic and cannot be generically rewritten witho
 
 Rules are evaluated in this order:
 
-1. Critical domestic service and PayPal rules
-2. Overseas AI rules before broad Google and Microsoft rules
-3. Other critical overseas service rules
-4. Service-specific managed rule sets
-5. Curated international overrides for legacy DIRECT entries
-6. Preserved legacy rules
-7. Broad overseas and mainland China rule sets
-8. `GEOIP,CN,Domestic,no-resolve`
-9. `FINAL,Final`
+1. Mandatory PayPal, ToDesk, Tencent/game, and private-network exceptions; `mdkj.lol` stays proxied
+2. Critical domestic services
+3. Overseas AI rules before broad Google and Microsoft rules
+4. Other critical overseas service rules
+5. Service-specific managed rule sets
+6. Curated international overrides for legacy DIRECT entries
+7. Preserved legacy rules
+8. Broad overseas and mainland China rule sets
+9. `GEOIP,CN,Domestic,no-resolve`
+10. `FINAL,Final`
 
 TikTok-specific rules are evaluated before the shared ByteDance fallback, so TikTok stays proxied while Douyin remains direct. Mainland AI services such as DeepSeek, Doubao, Kimi, Qwen, and Zhipu stay in `Domestic`; overseas AI services are evaluated in `AI` before vendor-wide Google, Microsoft, X, and CDN rules. Broad overseas classification is evaluated before broad mainland classification, with audited domestic overlap exceptions above both layers.
 
@@ -87,3 +89,9 @@ GitHub Actions runs the same configuration validator on every push and pull requ
 ## Node Safety
 
 Never commit node passwords, UUIDs, private keys, or subscription tokens. Keep node subscriptions private and configured separately in Shadowrocket.
+
+## Personal routing (2026-10-23)
+
+PayPal and ToDesk use the device's current network exit. On a mainland network this is the local mainland IP. DIRECT does not create a mainland IP when the device itself is abroad. ToDesk domain coverage follows its official `*.todesk.com` firewall guidance: https://www.todesk.com/helpcenter/solo-63.html . iOS cannot use Windows process rules; unknown relay IPs may still require a connection-log check on the actual phone. No broad UDP port bypass is enabled.
+
+Clash subscriptions are maintained at the existing Sublink Worker URL separately. Updating Shadowrocket node subscriptions alone does not refresh this routing configuration. Keep global routing on Configuration. The URL above is unchanged.
