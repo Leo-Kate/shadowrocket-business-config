@@ -76,6 +76,8 @@ The local `rules/` snapshots are sourced from the MIT-licensed [Repcz/Tool](http
 
 GitHub checks upstream managed rules every Monday at 11:23 Asia/Shanghai. A change must pass the complete validator before the automation updates the single `automation/managed-rules` review pull request. The workflow never pushes an upstream refresh directly to `main`, so the fixed subscription URL changes only after review.
 
+The refresh also runs when its workflow or maintenance scripts change. Review publication has its own regression checks. If repository policy prevents `GITHUB_TOKEN` from creating a new pull request, validated changes stay on the review branch and the run reports an explicit warning with a manual compare link. Existing pull requests continue to be updated. Download, validation, branch publication, and other GitHub API failures still fail the run. This does not enable automatic approval or merging, or change notification preferences.
+
 Refresh managed rule snapshots from their upstream source:
 
 ```powershell
